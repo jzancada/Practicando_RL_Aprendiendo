@@ -8,10 +8,10 @@ np.random.seed(0)
 class Env:
     a_space=[]
     def __init__(self):
-        self.N_T = 24*6
+        self.N_T = 24
         self.N_Q = 20
-        self.N_A = 3
-        self.a_space = np.array([-2,0,2])
+        self.N_A = 5
+        self.a_space = np.array([-2,-1,0,1,2])
 
     def reset(self):
         t=0
@@ -41,13 +41,18 @@ class Env:
 
         if a ==  2:
             q_next = q_next + 2
+        if a ==  1:
+            q_next = q_next + 1
+        if a == -1:
+            q_next = q_next - 1
         if a == -2:
             q_next = q_next - 2
 
         #########################
         # algo de estadistica
-        if (t_next % 24) == 10:
-            q_next = q_next
+        if (t_next % 24) == 8:
+            q_next = q - 10 # independiente de la accion que se haya tomado
+            t_next = t + 10
         #########################
 
         if q_next > self.N_Q-1:
@@ -62,13 +67,14 @@ class Env:
         reward = -cost[ t % 24 ]*delta_q
         # consumo bat
         reward -= np.abs(delta_q)*0.1
-        # anxiety
-        reward += np.abs(delta_q)*0.05
+        # anxiety ################# ojo
+        # reward += np.abs(delta_q)*0.0
 
         if error:
             reward -= 10
 
-        if error or t_next == self.N_T:
+        # fin simulacion
+        if error or t_next == self.N_T*6:
             done = True
 
         self.obs = [t_next, q_next] 
@@ -80,15 +86,17 @@ class Env:
 class Actor:
     Q={}
     V={}
-    def __init__(self, env):
+    def __init__(self, env, lr, gamma):
         self.N_S = env.N_T * env.N_Q
         for s in range (self.N_S):
             for a in env.a_space:
                 self.Q[s,a]=0
         self.env = env
+        self.lr = lr
+        self.gamma = gamma
 
     def to_s(self, obs):
-        t = obs[0]
+        t = obs[0] % 24
         q = obs[1]
         s = t*self.env.N_Q + q
         return s
@@ -104,18 +112,12 @@ class Actor:
         return a
 
     def update(self, obs, a, obs_next, reward):
-        t = obs[0]
-        q = obs[1]
-        s = t*self.env.N_Q + q
-        t_next = obs_next[0]
-        q_next = obs_next[1]
-        s_next = t_next*self.env.N_Q + q_next
-        ALPHA = 0.1
-        GAMMA = 0.999
+        s = self.to_s(obs)
+        s_next = self.to_s(obs_next)
         Q_next = [self.Q[s_next,a] for a in self.env.a_space]
         V_s_next = np.max(Q_next)
-        delta = reward + GAMMA*V_s_next - self.Q[s,a]
-        self.Q[s,a] = self.Q[s,a] + ALPHA * delta
+        delta = reward + self.gamma * V_s_next - self.Q[s,a]
+        self.Q[s,a] = self.Q[s,a] + self.lr * delta
         return delta
 
     def print_V(self):
@@ -136,7 +138,7 @@ class Actor:
                 total += self.V[s]
         return total
 
-def train(N_episodes, epsilon):
+def train(N_episodes, num_dias, epsilon):
     total_v =[]
     delta_v = []
     delta_v_episode = []
@@ -147,7 +149,7 @@ def train(N_episodes, epsilon):
 
         done = False
         while not done:
-            for t in range (env.N_T-1):
+            for t in range (env.N_T*num_dias-1):
                 for q in range (env.N_Q):
                     obs = [t, q]
                     a = act.get_action(obs, epsilon)
@@ -180,11 +182,15 @@ def train(N_episodes, epsilon):
 ##############################################
 if __name__ == "__main__":
     env = Env()
-    act = Actor(env)
+    act = Actor(env, lr = 0.2, gamma=0.99)
 
-    if False: # true entrena
+    if True: # true entrena
+        input = open('config.pickle', 'rb')
+        act.Q = pickle.load(input)
+        input.close()
+
         epsilon = 0.1
-        train(N_episodes = 3_00, epsilon = epsilon)
+        train(N_episodes = 3_00, num_dias = 2, epsilon = epsilon)
         print('Fin Train')
         # guardo en disco 
 
