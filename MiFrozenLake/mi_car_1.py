@@ -7,31 +7,45 @@ np.random.seed(0)
 
 class Env:
     a_space=[]
+    cost=[]
+
     def __init__(self):
         self.N_T = 24
         self.N_Q = 20
         self.N_A = 5
         self.a_space = np.array([-2,-1,0,1,2])
+        
+        self.cost = np.ones(self.N_T)
+        self.cost[21] = 2
+        self.cost[22] = 2
+        self.cost[0] = 0
+        self.cost[1] = 0
+        self.cost[2] = 0
+        self.cost[3] = 0
+
+        self.isAtHome=True
+        self.calcula_horaSalida()
+
+    def calcula_horaSalida(self):
+        self.horaSalida  = np.random.choice([8])
+        self.horaSalida  = np.random.choice([6,7,8,9,10,11])
+
+    def calcula_horaLlegada(self):
+        self.horaLLegada  = np.random.choice([18])
+        self.horaLLegada  = np.random.choice([15,16,17,18,19,20,21])
 
     def reset(self):
         t=0
         q_space = np.arange(self.N_Q)
         q=np.random.choice(q_space)
         self.obs = [t, q]
+        self.isAtHome=True
         return self.obs
 
-    def step(self, obs, a):
+    def stepAtHome(self, obs, a, horaSalida):
         done = False
         error = False
         reward = 0
-
-        cost = np.ones(self.N_T)
-        cost[14] = 2
-        cost[15] = 2
-        cost[20] = 0
-        cost[21] = 0
-        cost[22] = 0
-        cost[23] = 0
 
         t = obs[0]
         q = obs[1]
@@ -50,9 +64,8 @@ class Env:
 
         #########################
         # algo de estadistica
-        if (t_next % 24) == 8:
+        if (t_next % 24) == horaSalida:
             q_next = q - 10 # independiente de la accion que se haya tomado
-            t_next = t + 10
         #########################
 
         if q_next > self.N_Q-1:
@@ -64,7 +77,7 @@ class Env:
             error = True
 
         delta_q = q_next - q
-        reward = -cost[ t % 24 ]*delta_q
+        reward = -self.cost[ t % 24 ]*delta_q
         # consumo bat
         reward -= np.abs(delta_q)*0.1
         # anxiety ################# ojo
@@ -74,11 +87,28 @@ class Env:
             reward -= 10
 
         # fin simulacion
-        if error or t_next == self.N_T*6:
+        if error:
             done = True
 
         self.obs = [t_next, q_next] 
         return self.obs, reward, done
+
+    def step(self, obs, a):
+        obs_next = obs
+        t = obs[0]
+        if self.isAtHome:
+            obs_next, reward, done = self.stepAtHome(obs, a, self.horaSalida)
+            if t == self.horaSalida:
+                self.calcula_horaLlegada()
+                self.isAtHome = False
+        else:
+            obs_next, reward, done = (obs, 0, False)
+            obs_next[0] += 1 # se incrementa el tiempo
+            if t == self.horaLLegada:
+                self.calcula_horaSalida()
+                self.isAtHome = True
+
+        return obs_next, reward, done, self.isAtHome
 
     def init_obs(self, obs):
         self.obs = obs
@@ -149,20 +179,18 @@ def train(N_episodes, num_dias, epsilon):
 
         done = False
         while not done:
-            for t in range (env.N_T*num_dias-1):
-                for q in range (env.N_Q):
-                    obs = [t, q]
-                    a = act.get_action(obs, epsilon)
-                    obs_next, reward, done = env.step(obs, a)
-                    delta = act.update(obs, a, obs_next, reward)
-                    obs = obs_next
-                    delta_v.append(delta)
+            a = act.get_action(obs, epsilon)
+            obs_next, reward, done, isAtHome = env.step(obs, a)
+            if isAtHome:
+                delta = act.update(obs, a, obs_next, reward)
+                obs = obs_next
+                delta_v.append(delta)
         total = act.get_V()
 
         total_v.append(total)
         delta_v_episode.append(np.max(delta_v))
 
-        if i % 10 == 0:
+        if i % 1000 == 0:
             print('iter %d' % i , ' total_v %.1f' % total)
             act.print_V()
 
@@ -182,15 +210,18 @@ def train(N_episodes, num_dias, epsilon):
 ##############################################
 if __name__ == "__main__":
     env = Env()
-    act = Actor(env, lr = 0.2, gamma=0.99)
+    act = Actor(env, lr = 0.6, gamma=0.999)
 
-    if True: # true entrena
-        input = open('config.pickle', 'rb')
-        act.Q = pickle.load(input)
-        input.close()
+    if True: # True entrena / Falso para test
+
+        # el entrenamiento empieza en el ultimo fichero cargado
+        if False:
+            input = open('config.pickle', 'rb')
+            act.Q = pickle.load(input)
+            input.close()
 
         epsilon = 0.1
-        train(N_episodes = 3_00, num_dias = 2, epsilon = epsilon)
+        train(N_episodes = 500_000, num_dias = 10, epsilon = epsilon)
         print('Fin Train')
         # guardo en disco 
 
@@ -204,41 +235,47 @@ if __name__ == "__main__":
         input.close()
 
     # ejemplo de un recorrido
+    #----------- sim ----------------------
     t=0
-    q=19
+    q=10
     obs = np.array([t,q])
     env.init_obs(obs)
 
+    t_v = []
     q_v = []
     R_v = []
     r_v = []
+
+    t_v.append(obs[0])
+    q_v.append(obs[1])
     R = 0
     done = False
-    while not done:
-        env.init_obs(obs)
+    while t < 24*6: # para simulacion
         a = act.get_action(obs, epsilon=0  )
         s = act.to_s(obs)
-        obs_next, reward, done = env.step(obs, a)
-        print('t=%.1f'%obs[0] , ' q=%.1f'%obs[1], ' a=%d'%a , 'r=%.1f', reward)
+        obs_next, reward, done, isAtHome = env.step(obs, a)
+        print('t=%4d'%obs[0] , ' q=%5.1f'%obs[1], ' a=%3d'%a , 'r=%5.1f'%reward, isAtHome)
         R = R + reward
+        t_v.append(obs[0])
         q_v.append(obs[1])
         R_v.append(R)
         r_v.append(reward)
         obs = obs_next
+        t = obs[0]
 
     plt.figure()
-    plt.plot(q_v,'o-', color='red')
+    plt.plot(t_v, q_v,'o-', color='red')
     plt.grid(True)
     plt.legend('q')
     plt.show(block=False)
 
     plt.figure()
-    plt.plot(R_v,'o-', label='return', color='blue')
+    plt.plot(t_v[0:-1], R_v,'o-', label='return', color='blue')
     plt.grid(True)
     plt.legend()
 
     plt.figure()
-    plt.plot(r_v,'o-', label='reward', color='black')
+    plt.plot(t_v[0:-1], r_v,'o-', label='reward', color='black')
     plt.grid(True)
     plt.legend()
     plt.show(block=True)
