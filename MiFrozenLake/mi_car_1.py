@@ -212,7 +212,7 @@ if __name__ == "__main__":
     env = Env()
     act = Actor(env, lr = 0.6, gamma=0.999)
 
-    if True: # True entrena / Falso para test
+    if False: # True entrena / Falso para test
 
         # el entrenamiento empieza en el ultimo fichero cargado
         if False:
@@ -237,7 +237,7 @@ if __name__ == "__main__":
     # ejemplo de un recorrido
     #----------- sim ----------------------
     t=0
-    q=10
+    q=1
     obs = np.array([t,q])
     env.init_obs(obs)
 
