@@ -10,17 +10,19 @@ import torch.optim as optim
 class PolicyNetwork(nn.Module):
     def __init__(self, lr, input_dims, n_actions):
         super(PolicyNetwork, self).__init__()
-        self.fc1 = nn.Linear(*input_dims, 128)
-        self.fc2 = nn.Linear(128, 128)
-        self.fc3 = nn.Linear(128, n_actions)
+        self.fc1 = nn.Linear(*input_dims, 2)
+        self.fc2 = nn.Linear(2, 2)
+        self.fc3 = nn.Linear(2, n_actions)
         self.optimizer = optim.Adam(self.parameters(), lr=lr)
 
         self.device = T.device ('cuda:0' if T.cuda.is_available() else 'cpu')
         self.to(self.device)
 
     def forward(self, state):
-        x = F.relu(self.fc1(state))
-        x = F.relu(self.fc2(x))
+        # x = F.relu(self.fc1(state))
+        # x = F.relu(self.fc2(x))
+        x = F.tanh(self.fc1(state))
+        x = F.tanh(self.fc2(x))
         x = self.fc3(x)
 
         return x
@@ -40,12 +42,12 @@ class PolicyGradientAgent():
         probabilities = F.softmax(self.policy.forward(state))
         action_probs = T.distributions.Categorical(probabilities)
         action = action_probs.sample()
-        log_probs = action_probs.log_probs(action)
+        log_probs = action_probs.log_prob(action)
         self.action_memory.append(log_probs)
 
         return action.item()
 
-    def store_rewards(self, reward):
+    def store_reward(self, reward):
         self.reward_memory.append(reward)
 
     def learn(self):
@@ -61,7 +63,8 @@ class PolicyGradientAgent():
                 G_sum += self.reward_memory[k] * discount
                 discount *= self.gamma
             G[t] = G_sum
-        G = T.tensor(G, dtype=np.float64).to(self.policy.device)
+        # G = T.tensor(G, dtype=np.float64).to(self.policy.device)
+        G = T.tensor(G, dtype=T.float64).to(self.policy.device)
 
         loss = 0
         for g, logprob in zip(G, self.action_memory):
@@ -72,5 +75,3 @@ class PolicyGradientAgent():
         self.action_memory = []
         self.reward_memory = []
 
-print('hola')
-policyNetwork = PolicyNetwork(0.1, (1,1), 2)
