@@ -1,8 +1,8 @@
-import gym
+import argparse, os
 import numpy as np
 from dqn_agent import DQNAgent
 from utils import plot_learning_curve
-from gym import wrappers
+
 from env import Env
 
 np.random.seed(0)
@@ -16,7 +16,7 @@ if __name__ == '__main__':
     agent = DQNAgent(gamma=0.99, epsilon=1, lr=0.0002,
                      input_dims=(env.N_Q+env.N_T,),
                      n_actions=3, mem_size=50000, eps_min=0.1,
-                     batch_size=32, replace=1000, eps_dec=1e-5,
+                     batch_size=64, replace=1000, eps_dec=1e-5,
                      chkpt_dir='models/', algo='DQNAgent',
                      env_name='car_env')
 

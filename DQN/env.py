@@ -16,7 +16,7 @@ class Env():
         self.final_step = 0
 
     def set_final_step(self, t_0):
-        self.final_step = 24*4 + t_0
+        self.final_step = 24*30 + t_0
 
     def cat_t(self, t):
         # caterogire t
@@ -73,6 +73,27 @@ class Env():
         self.set_final_step(self.t)
         return self.obs 
 
+    def departure(self):
+        check = False
+        tq_departure = (0,0)
+        if self.t in {8,9,10}:
+            # tira el dado para ver si sale
+            CDF_8 = .3
+            CDF_9 = .6
+            CDF_10 = 1
+            p = np.random.rand()
+            if  (self.t ==  8 and p < CDF_8) or \
+                (self.t ==  9 and p < CDF_9) or \
+                (self.t == 10):
+                check = True
+                t = np.random.choice([14, 15, 16])
+                q = np.random.normal(loc = 10, scale =3)
+                q = np.floor(q)
+                if (q<0) or (q>self.N_Q-1):
+                    q = 10
+                tq_departure = (t,q)
+        return tq_departure, check
+
     def step(self, action):
         penalizacion_q = 0
         done = False
@@ -104,6 +125,14 @@ class Env():
         self.q = q_
         self.obs = self.to_cat()
 
+        # sale de viaje ? #####
+        tq_departure, check = self.departure ()
+        if check:
+            (self.t, self.q) = tq_departure
+            self.obs = self.to_cat()
+            # reset reward
+            reward = 0 
+        ######
         # batch
         if t_ > self.final_step:
             done = True

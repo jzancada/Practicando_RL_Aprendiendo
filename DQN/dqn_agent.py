@@ -41,14 +41,6 @@ class DQNAgent(object):
             action = T.argmax(actions).item()
         else:
             action = np.random.choice(self.action_space)
-            # en funcion del estado hay acciones que no se van a coger
-            if observation[0]:
-                # q = 0
-                action = np.random.choice([1, 2])
-            ##################### ajustar enca
-            if observation[19]:
-                # q = 1
-                action = np.random.choice([0, 1])
         return action
 
     def store_transition(self, state, action, reward, state_, done):
