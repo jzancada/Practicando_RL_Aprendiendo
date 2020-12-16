@@ -1,98 +1,49 @@
 import numpy as np
+from precios_red import Precios_red
 
 class Env():
     def __init__(self):
-        self.N_Q = 20
+        self.N_Q = 13
         self.N_T = 24
-        self.cost = np.ones(24)
-        self.cost[10]=20
         self.q_space=np.linspace(0,self.N_Q-1,self.N_Q)
-        self.a_space=np.array([-1,0,1])
+        self.a_space=np.array([-3,-1,0,1,3])
         self.t_space = np.linspace(0,23,24)
+        self.t_final_epoch = 0
+        self.precios_red = Precios_red()
+        self.t_precios_red = 0
         self.obs = self.reset()
-        self.t = 0
-        self.q = 0
         self.info = []
-        self.final_step = 0
 
-    def set_final_step(self, t_0):
-        self.final_step = 24*30 + t_0
-
-    def cat_t(self, t):
-        # caterogire t
-        t = t % 24
-        t_index = np.digitize(t, self.t_space, right = True)
-        self.t_cat = np.zeros(self.t_space.shape)
-        self.t_cat[t_index]=1
-        return self.t_cat
-
-    def cat_q(self, q):
-        # caterogire t
-        q_index = np.digitize(q, self.q_space, right = True)
-        self.q_cat = np.zeros(self.q_space.shape)
-        self.q_cat[q_index]=1
-        return self.q_cat
-
-    def to_cat(self):
-        # Q - T
-        t_cat = self.cat_t(self.t)
-        q_cat = self.cat_q(self.q)
-        qt_cat = np.zeros(self.N_Q+self.N_T)
-        qt_cat[0:self.N_Q]    = q_cat
-        qt_cat[self.N_Q : self.N_Q+self.N_T] = t_cat
-        return qt_cat
+    def set_obs(self, t_0, q_0):
+        dia = np.linspace(0,23,24, dtype=int)
+        x = np.zeros((25,))
+        x[0] = q_0
+        x[1:25] = self.precios_red.value[ (t_0+dia) ]
+        return x
 
     def reset(self):
-        self.t_reset_prev = 0
-        self.q_reset_prev = 0
-
-        self.t = np.random.choice(self.t_space)
+        # se coge un dia aleatorio
+        self.t_precios_red = int(np.random.uniform(0,650))*24
+        self.t = self.t_precios_red
         self.q = np.random.choice(self.q_space)
+        # se fuerza a cero
+        self.q = 0 ################
+        self.t_final_epoch = 24*30 + self.t
+        return self.set_obs(self.t, self.q)
 
-        self.t = self.t_reset_prev
-        self.q = self.q_reset_prev
-
-        # se muestrea todo el espacio de forma secuencial
-        self.t_reset_prev += 1
-        if self.t_reset_prev > self.N_T:
-            self.t_reset_prev = 0
-
-            self.q_reset_prev += 1
-            if self.q_reset_prev > self.N_Q:
-                self.q_reset_prev = 0
-
-        self.obs = self.to_cat()
-        self.set_final_step(self.t)
-        return self.obs 
-
-    # fija un estado (t,q)
-    def reset_fix(self, t_0, q_0):
-        self.t = t_0
+    # fija un estado (q)
+    def reset_fix_q_0(self, q_0):
+        self.t = self.t_precios_red
         self.q = q_0
-        self.obs = self.to_cat()
-        self.set_final_step(self.t)
+        self.obs = self.set_obs(self.t, self.q)
         return self.obs 
 
-    def departure(self):
-        check = False
-        tq_departure = (0,0)
-        if self.t in {8,9,10}:
-            # tira el dado para ver si sale
-            CDF_8 = .3
-            CDF_9 = .6
-            CDF_10 = 1
-            p = np.random.rand()
-            if  (self.t ==  8 and p < CDF_8) or \
-                (self.t ==  9 and p < CDF_9) or \
-                (self.t == 10):
-                check = True
-                t = np.random.choice([14, 15, 16])
-                q = np.random.normal(loc = 10, scale =3)
-                q = np.floor(q)
-                if (q<0) or (q>self.N_Q-1):
-                    q = 10
-                tq_departure = (t,q)
-        return tq_departure, check
+    # fija un estado (q)
+    def reset_fix_t_q_0(self, t_0, q_0):
+        self.reset_fix_q_0 (q_0)
+        self.t = t_0 # ojo que reset_fix_q_0 pisa
+        self.obs = self.set_obs(self.t, self.q)
+        return self.obs 
 
     def step(self, action):
         penalizacion_q = 0
@@ -105,36 +56,33 @@ class Env():
         q_ = self.q + q_action
 
         if (q_ > self.N_Q-1):
-            penalizacion_q = -1
+            penalizacion_q = -5
             q_ = self.N_Q-1
 
         if (q_ < 0):
-            penalizacion_q = -1
+            penalizacion_q = -5
             q_ = 0
 
         delta_q = q_ - self.q
-        reward = -self.cost[ int(self.t) % 24 ]*delta_q + penalizacion_q
+        reward = -self.precios_red.value[ self.t ]*delta_q + penalizacion_q
 
-        # penalizao si en t=9 no esta al 10
-        if (t_ % 24) == 9:
-            reward_en_9 = np.abs(q_)
-            reward += reward_en_9*10
+        # consumo bateria. para todas las acciones excepto para accion ==2
+        reward -= np.abs(delta_q)*2
+        # fin consumo bateria
 
         # se actualizan 
         self.t = t_
         self.q = q_
-        self.obs = self.to_cat()
+        self.obs = self.set_obs(self.t, self.q)
 
-        # sale de viaje ? #####
-        tq_departure, check = self.departure ()
-        if check:
-            (self.t, self.q) = tq_departure
-            self.obs = self.to_cat()
-            # reset reward
-            reward = 0 
-        ######
         # batch
-        if t_ > self.final_step:
+        if t_ > self.t_final_epoch:
             done = True
+        if False and np.abs(penalizacion_q) >0:
+            done = True
+
+        # incrementa tiempo 
+        self.t_precios_red += 1           
+        # incrementa tiempo 
         return  self.obs, reward, done, self.info
 

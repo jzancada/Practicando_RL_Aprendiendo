@@ -11,8 +11,16 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Vehiculos Electricos')
     # the hyphen makes the argument optional
-    parser.add_argument('-n_epochs', type=int, default=10,
+    parser.add_argument('-n_epochs', type=int, default=1_000,
         help='Number of Epochs')
+    parser.add_argument('-lr', type=float, default=0.0005,
+        help='Learning rate')
+    parser.add_argument('-epsilon', type=float, default=1,
+        help='epsilon')
+    parser.add_argument('-eps_min', type=float, default=0.1,
+        help='eps_min')
+    parser.add_argument('-eps_dec', type=float, default=1e-6,
+        help='eps_dec')
     args = parser.parse_args()
 
     env = Env()
@@ -21,10 +29,13 @@ if __name__ == '__main__':
     n_games = args.n_epochs
 
     agent = DQNAgent(gamma=0.99, 
-        epsilon=1, lr=0.0002,
-                     input_dims=2, # (q, c)
-                     n_actions=3, mem_size=50000, eps_min=0.1,
-                     batch_size=64, replace=1000, eps_dec=1e-5,
+        epsilon=args.epsilon, 
+        lr=args.lr,
+                     input_dims=(25,), # (q, c)
+                     n_actions=5, mem_size=50000, 
+                     eps_min=args.eps_min,
+                     batch_size=64, replace=1000, 
+                     eps_dec=args.eps_dec,
                      chkpt_dir='models/', algo='DQNAgent',
                      env_name='car_env')
 
